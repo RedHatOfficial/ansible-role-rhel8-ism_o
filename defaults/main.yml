@@ -10,7 +10,6 @@ var_accounts_maximum_age_login_defs: '60'
 var_accounts_minimum_age_login_defs: '1'
 var_accounts_password_warn_age_login_defs: '7'
 rsyslog_remote_loghost_address: logcollector
-sysctl_kernel_kptr_restrict_value: '1'
 var_selinux_policy_name: targeted
 var_selinux_state: enforcing
 var_auditadm_exec_content: 'true'
@@ -52,6 +51,7 @@ DISA_STIG_RHEL_08_010521: true
 DISA_STIG_RHEL_08_010522: true
 DISA_STIG_RHEL_08_010550: true
 DISA_STIG_RHEL_08_010561: true
+DISA_STIG_RHEL_08_010670: true
 DISA_STIG_RHEL_08_010830: true
 DISA_STIG_RHEL_08_020011: true
 DISA_STIG_RHEL_08_020012: true
@@ -85,6 +85,7 @@ DISA_STIG_RHEL_08_030490: true
 DISA_STIG_RHEL_08_030590: true
 DISA_STIG_RHEL_08_030600: true
 DISA_STIG_RHEL_08_030670: true
+DISA_STIG_RHEL_08_030680: true
 DISA_STIG_RHEL_08_030690: true
 DISA_STIG_RHEL_08_030740: true
 DISA_STIG_RHEL_08_040000: true
@@ -194,6 +195,7 @@ package_chrony_installed: true
 package_fapolicyd_installed: true
 package_firewalld_installed: true
 package_rear_installed: true
+package_rsyslog_gnutls_installed: true
 package_rsyslog_installed: true
 package_squid_removed: true
 package_sudo_installed: true
@@ -225,6 +227,7 @@ service_chronyd_enabled: true
 service_chronyd_or_ntpd_enabled: true
 service_fapolicyd_enabled: true
 service_firewalld_enabled: true
+service_kdump_disabled: true
 service_rsyslog_enabled: true
 service_snmpd_disabled: true
 service_squid_disabled: true

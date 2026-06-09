@@ -79,6 +79,29 @@
   - no_reboot_needed
   - package_rear_installed
 
+- name: Ensure rsyslog-gnutls is installed
+  ansible.builtin.package:
+    name: rsyslog-gnutls
+    state: present
+  when:
+  - DISA_STIG_RHEL_08_030680 | bool
+  - enable_strategy | bool
+  - low_complexity | bool
+  - low_disruption | bool
+  - medium_severity | bool
+  - no_reboot_needed | bool
+  - package_rsyslog_gnutls_installed | bool
+  - '"kernel-core" in ansible_facts.packages'
+  tags:
+  - CCE-82859-0
+  - DISA-STIG-RHEL-08-030680
+  - enable_strategy
+  - low_complexity
+  - low_disruption
+  - medium_severity
+  - no_reboot_needed
+  - package_rsyslog-gnutls_installed
+
 - name: Ensure rsyslog is installed
   ansible.builtin.package:
     name: rsyslog
@@ -264,7 +287,7 @@
   - no_reboot_needed
   - package_chrony_installed
 
-- name: 'Uninstall xinetd Package: Ensure xinetd is removed'
+- name: 'Uninstall xinetd package if not used by network services: Ensure xinetd is removed'
   ansible.builtin.package:
     name: xinetd
     state: absent
@@ -568,6 +591,58 @@
   - service_avahi_daemon_disabled | bool
   - special_service_block | bool
   - ( "avahi" in ansible_facts.packages and "kernel-core" in ansible_facts.packages )
+
+- name: Disable KDump Kernel Crash Analyzer (kdump) - Disable service kdump
+  block:
+  - name: Disable KDump Kernel Crash Analyzer (kdump) - Collect systemd Services Present in the System
+    ansible.builtin.command: systemctl -q list-unit-files --type service
+    register: service_exists
+    changed_when: false
+    failed_when: service_exists.rc not in [0, 1]
+    check_mode: false
+  - name: Disable KDump Kernel Crash Analyzer (kdump) - Ensure kdump.service is Masked
+    ansible.builtin.systemd:
+      name: kdump.service
+      state: stopped
+      enabled: false
+      masked: true
+    when: service_exists.stdout_lines is search("kdump.service", multiline=True)
+  - name: Unit Socket Exists - kdump.socket
+    ansible.builtin.command: systemctl -q list-unit-files kdump.socket
+    register: socket_file_exists
+    changed_when: false
+    failed_when: socket_file_exists.rc not in [0, 1]
+    check_mode: false
+  - name: Disable KDump Kernel Crash Analyzer (kdump) - Disable Socket kdump
+    ansible.builtin.systemd:
+      name: kdump.socket
+      enabled: false
+      state: stopped
+      masked: true
+    when: socket_file_exists.stdout_lines is search("kdump.socket", multiline=True)
+  tags:
+  - CCE-80878-2
+  - DISA-STIG-RHEL-08-010670
+  - NIST-800-53-CM-6(a)
+  - NIST-800-53-CM-7(a)
+  - NIST-800-53-CM-7(b)
+  - disable_strategy
+  - low_complexity
+  - low_disruption
+  - medium_severity
+  - no_reboot_needed
+  - service_kdump_disabled
+  - special_service_block
+  when:
+  - DISA_STIG_RHEL_08_010670 | bool
+  - disable_strategy | bool
+  - low_complexity | bool
+  - low_disruption | bool
+  - medium_severity | bool
+  - no_reboot_needed | bool
+  - service_kdump_disabled | bool
+  - special_service_block | bool
+  - '"kernel-core" in ansible_facts.packages'
 
 - name: Enable the File Access Policy Service - Enable service fapolicyd
   block:
@@ -5433,7 +5508,7 @@
 
 - name: Lock the password of the user accounts other than root with uid 0
   ansible.builtin.command: passwd -l {{ item.key }}
-  loop: '{{ getent_passwd | dict2items | rejectattr(''key'', ''search'', ''root'') | list }}'
+  loop: '{{ getent_passwd | dict2items | rejectattr(''key'', ''equalto'', ''root'') | list }}'
   when:
   - DISA_STIG_RHEL_08_040200 | bool
   - accounts_no_uid_except_zero | bool
@@ -5699,13 +5774,14 @@
   - no_reboot_needed
   - rsyslog_cron_logging
 
-- name: Ensure cron Is Logging To Rsyslog - Check if the parameter cron.* is configured
-  ansible.builtin.find:
-    paths:
-    - /etc/rsyslog.conf
-    - /etc/rsyslog.d
-    contains: ^\s*{{ "cron.*"| regex_escape }}
-  register: _sshd_config_has_parameter
+- name: Ensure cron Is Logging To Rsyslog - Check if the parameter cron.* is configured in /etc/rsyslog.conf
+  ansible.builtin.lineinfile:
+    path: /etc/rsyslog.conf
+    regexp: ^\s*{{ "cron.*"| regex_escape }}
+    state: absent
+  check_mode: true
+  changed_when: false
+  register: _config_file_has_parameter
   when:
   - DISA_STIG_RHEL_08_030010 | bool
   - configure_strategy | bool
@@ -5727,13 +5803,68 @@
   - no_reboot_needed
   - rsyslog_cron_logging
 
-- name: Ensure cron Is Logging To Rsyslog - Check if the parameter cron.* is configured correctly
+- name: Ensure cron Is Logging To Rsyslog - Check if the parameter cron.* is configured in /etc/rsyslog.d
   ansible.builtin.find:
     paths:
-    - /etc/rsyslog.conf
+    - /etc/rsyslog.d
+    contains: ^\s*{{ "cron.*"| regex_escape }}
+  register: _config_dir_has_parameter
+  when:
+  - DISA_STIG_RHEL_08_030010 | bool
+  - configure_strategy | bool
+  - low_complexity | bool
+  - low_disruption | bool
+  - medium_severity | bool
+  - no_reboot_needed | bool
+  - rsyslog_cron_logging | bool
+  - '"kernel-core" in ansible_facts.packages'
+  - '"rsyslog" in ansible_facts.packages'
+  tags:
+  - CCE-80859-2
+  - DISA-STIG-RHEL-08-030010
+  - NIST-800-53-CM-6(a)
+  - configure_strategy
+  - low_complexity
+  - low_disruption
+  - medium_severity
+  - no_reboot_needed
+  - rsyslog_cron_logging
+
+- name: Ensure cron Is Logging To Rsyslog - Check if the parameter cron.* is configured correctly in /etc/rsyslog.conf
+  ansible.builtin.lineinfile:
+    path: /etc/rsyslog.conf
+    regexp: ^\s*{{ "cron.*"| regex_escape }}/var/log/cron$
+    state: absent
+  check_mode: true
+  changed_when: false
+  register: _config_file_correctly
+  when:
+  - DISA_STIG_RHEL_08_030010 | bool
+  - configure_strategy | bool
+  - low_complexity | bool
+  - low_disruption | bool
+  - medium_severity | bool
+  - no_reboot_needed | bool
+  - rsyslog_cron_logging | bool
+  - '"kernel-core" in ansible_facts.packages'
+  - '"rsyslog" in ansible_facts.packages'
+  tags:
+  - CCE-80859-2
+  - DISA-STIG-RHEL-08-030010
+  - NIST-800-53-CM-6(a)
+  - configure_strategy
+  - low_complexity
+  - low_disruption
+  - medium_severity
+  - no_reboot_needed
+  - rsyslog_cron_logging
+
+- name: Ensure cron Is Logging To Rsyslog - Check if the parameter cron.* is configured correctly in /etc/rsyslog.d
+  ansible.builtin.find:
+    paths:
     - /etc/rsyslog.d
     contains: ^\s*{{ "cron.*"| regex_escape }}/var/log/cron$
-  register: _sshd_config_correctly
+  register: _config_dir_correctly
   when:
   - DISA_STIG_RHEL_08_030010 | bool
   - configure_strategy | bool
@@ -5781,7 +5912,7 @@
       create: false
       regexp: (?i)^\s*{{ "cron.*"| regex_escape }}
       state: absent
-    with_items: '{{ _etc_rsyslog_d_has_parameter.files }}'
+    with_items: '{{ _etc_rsyslog_d_has_parameter.files | default([]) }}'
     when: _etc_rsyslog_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/rsyslog.d/cron.conf
     ansible.builtin.lineinfile:
@@ -5800,7 +5931,8 @@
   - rsyslog_cron_logging | bool
   - '"kernel-core" in ansible_facts.packages'
   - '"rsyslog" in ansible_facts.packages'
-  - _sshd_config_correctly.matched == 0 or _sshd_config_has_parameter.matched != 1
+  - (_config_file_correctly.found == 0 and _config_dir_correctly.matched == 0) or ((_config_file_has_parameter.found | int)
+    + (_config_dir_has_parameter.matched | int)) != 1
   tags:
   - CCE-80859-2
   - DISA-STIG-RHEL-08-030010
@@ -7400,7 +7532,7 @@
   - wireless_disable_interfaces | bool
   - ( not ( ansible_virtualization_type in ["docker", "lxc", "openvz", "podman", "container"] ) )
   - '''NetworkManager'' in ansible_facts.packages'
-  - ansible_facts.services['NetworkManager.service'].state == 'running'
+  - ('NetworkManager.service' in ansible_facts.services and ansible_facts.services['NetworkManager.service'].state == 'running')
   tags:
   - CCE-83501-7
   - DISA-STIG-RHEL-08-040110
@@ -9820,8 +9952,7 @@
 
 - name: Restrict Exposed Kernel Pointer Addresses Access - Find all files that set kernel.kptr_restrict to correct value
   ansible.builtin.shell:
-    cmd: find -L {{ sysctl_paths | join(" ") }} -type f -name '*.conf' | xargs grep -HP '^\s*kernel.kptr_restrict\s*=\s*{{
-      sysctl_kernel_kptr_restrict_value }}$'
+    cmd: find -L {{ sysctl_paths | join(" ") }} -type f -name '*.conf' | xargs grep -HP '^\s*kernel.kptr_restrict\s*=\s*1$'
   register: find_correct_value
   check_mode: false
   changed_when: false
@@ -9911,10 +10042,10 @@
   - reboot_required
   - sysctl_kernel_kptr_restrict
 
-- name: Restrict Exposed Kernel Pointer Addresses Access - Ensure sysctl kernel.kptr_restrict is set
+- name: Restrict Exposed Kernel Pointer Addresses Access - Ensure sysctl kernel.kptr_restrict is set to 1
   ansible.posix.sysctl:
     name: kernel.kptr_restrict
-    value: '{{ sysctl_kernel_kptr_restrict_value }}'
+    value: '1'
     sysctl_file: /etc/sysctl.d/kernel_kptr_restrict.conf
     state: present
     reload: true
@@ -11150,7 +11281,7 @@
     when:
     - result_nmcli_cmd_zone_assignment is defined
     - result_nmcli_cmd_zone_assignment is changed
-    - result_nmcli_cmd_zone_assignment.results | selectattr('changed', 'equalto', true) | list | length > 0
+    - (result_nmcli_cmd_zone_assignment.results | selectattr('changed', 'equalto', true) | list | length > 0)
   - name: Enable SSH Server firewalld Firewall Exception - Collect firewalld active zones
     ansible.builtin.shell:
       cmd: firewall-cmd --get-active-zones | grep -v "^ " | cut -d " " -f 1
@@ -11178,8 +11309,8 @@
   - medium_severity | bool
   - no_reboot_needed | bool
   - '"kernel-core" in ansible_facts.packages'
-  - ansible_facts.services['firewalld.service'].state == 'running'
-  - ansible_facts.services['NetworkManager.service'].state == 'running'
+  - ('firewalld.service' in ansible_facts.services and ansible_facts.services['firewalld.service'].state == 'running')
+  - ('NetworkManager.service' in ansible_facts.services and ansible_facts.services['NetworkManager.service'].state == 'running')
   tags:
   - CCE-80820-4
   - NIST-800-171-3.1.12
@@ -11197,11 +11328,14 @@
 - name: Enable SSH Server firewalld Firewall Exception - Informative message based on services states
   ansible.builtin.assert:
     that:
-    - ansible_check_mode or ansible_facts.services['firewalld.service'].state == 'running'
-    - ansible_check_mode or ansible_facts.services['NetworkManager.service'].state == 'running'
+    - (ansible_check_mode or ('firewalld.service' in ansible_facts.services and ansible_facts.services['firewalld.service'].state
+      == 'running'))
+    - (ansible_check_mode or ('NetworkManager.service' in ansible_facts.services and ansible_facts.services['NetworkManager.service'].state
+      == 'running'))
     fail_msg:
     - firewalld and NetworkManager services are not active. Remediation aborted!
-    - This remediation could not be applied because it depends on firewalld and NetworkManager services running.
+    - This remediation could not be applied because it depends on firewalld
+    - and NetworkManager services running.
     - The service is not started by this remediation in order to prevent connection issues.
     success_msg:
     - Enable SSH Server firewalld Firewall Exception remediation successfully executed
